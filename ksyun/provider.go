@@ -69,8 +69,8 @@ func Provider() terraform.ResourceProvider {
 			"ksyun_lb_register_backend_servers": dataSourceKsyunRegisterBackendServers(),
 		},
 		ResourcesMap: map[string]*schema.Resource{
-			"ksyun_eip":                       resourceKsyunEip(),
-			"ksyun_eip_associate":             resourceKsyunEipAssociation(),
+			"ksyun_eip":           resourceKsyunEip(),
+			"ksyun_eip_associate": resourceKsyunEipAssociation(),
 			//"ksyun_lb":                        resourceKsyunLb(),
 			"ksyun_healthcheck":               resourceKsyunHealthCheck(),
 			"ksyun_lb_listener":               resourceKsyunListener(),
