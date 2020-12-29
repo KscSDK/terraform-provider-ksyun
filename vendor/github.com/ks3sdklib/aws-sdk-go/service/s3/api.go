@@ -4,7 +4,10 @@
 package s3
 
 import (
+	"fmt"
+	mapset "github.com/deckarep/golang-set"
 	"github.com/ks3sdklib/aws-sdk-go/aws"
+	"github.com/ks3sdklib/aws-sdk-go/aws/awserr"
 	"io"
 	"net/url"
 	"sync"
@@ -544,11 +547,91 @@ func (c *S3) DeleteObjectsRequest(input *DeleteObjectsInput) (req *aws.Request, 
 
 // This operation enables you to delete multiple objects from a bucket using
 // a single HTTP request. You may specify up to 1000 keys.
-func (c *S3) DeleteObjects(input *DeleteObjectsInput) (*DeleteObjectsOutput, error) {
-	req, out := c.DeleteObjectsRequest(input)
-	err := req.Send()
-	return out, err
+func (c *S3) DeleteObjects(input *DeleteObjectsInput) (*DeleteObjectsOutput) {
+	var errors [] *Error;
+	var okList [] *DeletedObject;
+	for _, t := range input.Delete.Objects {
+		_, err := c.DeleteObject(&DeleteObjectInput{Bucket: input.Bucket, Key: t.Key})
+		if err != nil {
+			aerr, _ := err.(awserr.Error)
+			errors = append(errors,&Error{Key: t.Key,Code:aws.String(aerr.Code()),Message: aws.String(aerr.Message())})
+		}else {
+			okList = append(okList,&DeletedObject{Key: t.Key})
+		}
+	}
+	output := &DeleteObjectsOutput{
+		Deleted:okList,
+		Errors: errors,
+	}
+	return output
 }
+func (c *S3) DeleteBucketPrefix(input *DeleteBucketPrefixInput) (*DeleteObjectsOutput, error) {
+
+
+	var errors [] *Error;
+	var okList [] *DeletedObject;
+
+	var objects [] *Object;
+	count := 0
+	marker := aws.String("")
+	prefix := input.Prefix
+	var output = &DeleteObjectsOutput{
+		Deleted:okList,
+		Errors: errors,
+	}
+	for {
+		resp, err := c.ListObjects(&ListObjectsInput{
+			Bucket:  input.Bucket,
+			Prefix:  prefix,
+			Marker:  marker,
+			MaxKeys: aws.Long(1000),
+		})
+		if err == nil {
+			objects = append(objects,resp.Contents... )
+			for _, t := range objects {
+				_, err := c.DeleteObject(&DeleteObjectInput{Bucket: input.Bucket, Key: t.Key})
+				if err != nil {
+					aerr, _ := err.(awserr.Error)
+					errors = append(errors,&Error{Key: t.Key,Code:aws.String(aerr.Code()),Message: aws.String(aerr.Message())})
+					output.Errors = errors
+				}else {
+					okList = append(okList,&DeletedObject{Key: t.Key})
+					output.Deleted = okList
+				}
+			}
+			count += len(objects)
+			if *resp.IsTruncated == false{
+				break
+			}
+			marker = objects[999].Key
+		}else {
+			return output,err
+		}
+	}
+	return output,nil
+}
+
+/**
+重试删除前缀
+*/
+func (c *S3) TryDeleteBucketPrefix(input *DeleteBucketPrefixInput) (*DeleteObjectsOutput, error) {
+
+	params := input
+	var output *DeleteObjectsOutput
+	err := Do(func(attempt int) (bool, error) {
+		var err error
+		output, err = c.DeleteBucketPrefix(params)
+		if err != nil {
+			fmt.Println("DeleteBucketPrefix - ", err)
+		}
+		return attempt < 3, err // 重试3次
+	})
+	if err != nil {
+		fmt.Println("error:", err)
+	}
+	return output,nil
+}
+
 func (c *S3) DeleteObjectsPresignedUrl(input *DeleteObjectsInput, expires time.Duration) (*url.URL, error) {
 	req, _ := c.DeleteObjectsRequest(input)
 	req.ExpireTime = expires
@@ -1984,6 +2067,14 @@ func (c *S3) PutObject(input *PutObjectInput) (*PutObjectOutput, error) {
 	err := req.Send()
 	return out, err
 }
+
+func (c *S3) PutObjectMD5Check(input *PutObjectInput) (*PutObjectOutput, error) {
+	req, out := c.PutObjectRequest(input)
+	req.Handlers.Build.PushBack(contentMD5)
+	err := req.Send()
+	return out, err
+}
+
 func (c *S3) PutObjectPresignedUrl(input *PutObjectInput, expires time.Duration) (*url.URL, error) {
 	req, _ := c.PutObjectRequest(input)
 	req.ExpireTime = expires
@@ -2970,6 +3061,11 @@ type DeleteObjectInput struct {
 	ContentType *string `location:"header" locationName:"Content-Type" type:"string"`
 
 	metadataDeleteObjectInput `json:"-" xml:"-"`
+}
+
+type DeleteBucketPrefixInput struct {
+	Bucket *string `location:"uri" locationName:"Bucket" type:"string" required:"true"`
+	Prefix *string `type:"string"`
 }
 
 type metadataDeleteObjectInput struct {
@@ -5508,4 +5604,36 @@ type WebsiteConfiguration struct {
 
 type metadataWebsiteConfiguration struct {
 	SDKShapeTraits bool `type:"structure"`
+}
+
+/**
+  ACL类型
+*/
+const AllUsersUri = "http://acs.amazonaws.com/groups/global/AllUsers"
+
+type CannedAccessControlType int32
+
+const (
+	PublicReadWrite CannedAccessControlType = 0
+	PublicRead      CannedAccessControlType = 1
+	Private         CannedAccessControlType = 2
+)
+
+func GetAcl(resp GetObjectACLOutput) CannedAccessControlType {
+
+	allUsersPermissions := mapset.NewSet()
+	for _, value := range resp.Grants {
+		if value.Grantee.URI != nil && *value.Grantee.URI == AllUsersUri {
+			allUsersPermissions.Add(value.Permission)
+		}
+	}
+	read := allUsersPermissions.Contains("READ")
+	write := allUsersPermissions.Contains("WRITE")
+	if read && write {
+		return PublicReadWrite
+	} else if read {
+		return PublicRead
+	} else {
+		return Private
+	}
 }

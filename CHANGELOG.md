@@ -1,4 +1,6 @@
-## 1.1.0 (Unreleased)
+## 1.1.1 (Unreleased)
+
+## 1.1.0 (Dec 21,2020)
 
 IMPROVEMENTS:
 
@@ -7,6 +9,8 @@ IMPROVEMENTS:
 - icmp_code , icmp_type and weight support zero value ([#20](https://github.com/terraform-providers/terraform-provider-ksyun/issues/20))
 - instance remove the function of creating data_disk and support show data_disk ([#22](https://github.com/terraform-providers/terraform-provider-ksyun/issues/22))
 - instance,eip and lb support project ([#26](https://github.com/terraform-providers/terraform-provider-ksyun/issues/26))
+- add attach and release eip functions for krds instance ([#27](https://github.com/terraform-providers/terraform-provider-ksyun/issues/27))
+
 FEATURES:
 
 - - **New Resource:** `ksyun_lb_rule` ([#16](https://github.com/terraform-providers/terraform-provider-ksyun/issues/16))
@@ -32,7 +36,8 @@ BUG FIXES:
 - fix redis param ([#10](https://github.com/terraform-providers/terraform-provider-ksyun/issues/10))
 - fix instance update instance password ([#11](https://github.com/terraform-providers/terraform-provider-ksyun/issues/11))
 - fix instance update instance type ([#12](https://github.com/terraform-providers/terraform-provider-ksyun/issues/12))
-
+- using fixed schema to save db instance instead of all the data in response ([#28](https://github.com/terraform-providers/terraform-provider-ksyun/issues/28))
+- fix bugs of using error az param when changing password for or renaming a redis instance ([#29](https://github.com/terraform-providers/terraform-provider-ksyun/issues/29))
 
 ## 1.0.0 (May 20, 2020)
 
